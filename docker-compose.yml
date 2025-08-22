@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  unenrolled-api:
+    build: .
+    container_name: unenrolled-api
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - GOOGLE_PRIVATE_KEY_ID=${GOOGLE_PRIVATE_KEY_ID}
+      - GOOGLE_PRIVATE_KEY=${GOOGLE_PRIVATE_KEY}
+      - GOOGLE_CLIENT_EMAIL=${GOOGLE_CLIENT_EMAIL}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_X509_CERT_URL=${GOOGLE_CLIENT_X509_CERT_URL}
+      - MATO_GROSSO_STUDENTS_SHEET_ID=${MATO_GROSSO_STUDENTS_SHEET_ID}
+      - MATO_GROSSO_TEACHERS_SHEET_ID=${MATO_GROSSO_TEACHERS_SHEET_ID}
+      - PARANA_DRIVE_FOLDER_ID=${PARANA_DRIVE_FOLDER_ID}
+      - SNOWFLAKE_ACCOUNT=${SNOWFLAKE_ACCOUNT}
+      - SNOWFLAKE_USER=${SNOWFLAKE_USER}
+      - SNOWFLAKE_PASSWORD=${SNOWFLAKE_PASSWORD}
+      - SNOWFLAKE_WAREHOUSE=${SNOWFLAKE_WAREHOUSE}
+      - SNOWFLAKE_DATABASE=${SNOWFLAKE_DATABASE}
+      - SNOWFLAKE_SCHEMA=${SNOWFLAKE_SCHEMA:-PUBLIC}
+      - SNOWFLAKE_DEFAULT_TABLE=${SNOWFLAKE_DEFAULT_TABLE:-EFDATA_ELIVE.ELIVE_STUDENT_ANALYTICS.ACTIVITY_REPORTS_SUMMARY_B2G}
+      - FTP_HOST=${FTP_HOST}
+      - FTP_USER=${FTP_USER}
+      - FTP_PASSWORD=${FTP_PASSWORD}
+      - FTP_PORT=${FTP_PORT:-21}
+    networks:
+      - n8n-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+networks:
+  n8n-network:
+    external: true
+    name: n8n_default
