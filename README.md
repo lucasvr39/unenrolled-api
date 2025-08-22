@@ -6,7 +6,7 @@ This project provides a FastAPI application to find users from external data sou
 
 1.  **Clone the repository:**
     ```bash
-    git clone <repository-url>
+    git clone git@github.com:lucasvr39/unenrolled-api.git
     cd unenrolled-api
     ```
 
