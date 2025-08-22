@@ -37,6 +37,30 @@ def find_unenrolled_users(client: str, data_type: str) -> Dict[str, Any]:
         external_data = fetch_external_data(client, data_type)
         logger.info(f"External data shape: {external_data.shape}")
 
+        # Apply EJA filtering for Goias students only
+        if client == "goias" and data_type == "students":
+            logger.info("Applying EJA filtering for Goias students...")
+            initial_count = len(external_data)
+
+            # Check if "Composição" column exists
+            if "Composição" in external_data.columns:
+                # Filter out rows containing "EJA" in the "Composição" column
+                external_data = external_data[
+                    ~external_data["Composição"]
+                    .astype(str)
+                    .str.upper()
+                    .str.contains("EJA", na=False)
+                ]
+                filtered_count = len(external_data)
+                logger.info(
+                    f"EJA filtering completed: {initial_count - filtered_count} rows removed "
+                    f"({filtered_count} remaining)"
+                )
+            else:
+                logger.warning(
+                    "Composição column not found in external data, skipping EJA filtering"
+                )
+
         # Fetch Snowflake enrollment data using cached data
         logger.info("Fetching Snowflake enrollment data...")
         company_name = get_snowflake_company_name(client)
@@ -85,12 +109,16 @@ def find_unenrolled_users(client: str, data_type: str) -> Dict[str, Any]:
             company_name_error = get_snowflake_company_name(client)
         except Exception:
             company_name_error = f"Unknown (client: {client})"
-        
+
         return {
             "status": "error",
             "message": str(e),
             "timestamp": datetime.now().isoformat(),
-            "metadata": {"client": client, "data_type": data_type, "company": company_name_error},
+            "metadata": {
+                "client": client,
+                "data_type": data_type,
+                "company": company_name_error,
+            },
         }
 
 
