@@ -277,8 +277,22 @@ class FTPFetcher(ExternalDataFetcher):
                 return []
             return [f for f in file_list if pattern.lower() in f.lower()]
 
-        elif data_type in ["teachers", "teachers_with_gls"]:
+        elif data_type == "teachers":
             exclude_patterns = ftp_config.get("teachers_pattern", {}).get("exclude", [])
+            matching_files = []
+
+            for filename in file_list:
+                filename_lower = filename.lower()
+                should_exclude = any(
+                    pattern.lower() in filename_lower for pattern in exclude_patterns
+                )
+                if not should_exclude:
+                    matching_files.append(filename)
+
+            return matching_files
+
+        elif data_type == "teachers_with_gls":
+            exclude_patterns = ftp_config.get("teachers_with_gls_pattern", {}).get("exclude", [])
             matching_files = []
 
             for filename in file_list:

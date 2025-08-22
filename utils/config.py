@@ -93,7 +93,7 @@ def get_client_specific_config(client: str) -> Dict[str, Any]:
                     "students_pattern": "alunos",
                     "teachers_pattern": {"exclude": ["sem_aula_ao_vivo", "alunos"]},
                     "teachers_with_gls_pattern": {
-                        "exclude": ["sem_aula_ao_vivo", "alunos"]
+                        "exclude": ["sem_aula_ao_vivo", "alunos", "servidores"]
                     },
                 },
             }
