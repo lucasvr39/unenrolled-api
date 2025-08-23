@@ -11,7 +11,7 @@ import pandas as pd
 from .client_config import find_email_column, get_snowflake_company_name
 from .fetch_external import fetch_external_data
 from .logging_config import get_logger
-from .snowflake_query import SnowflakeClient
+from .snowflake_query import get_client_enrollment_data
 
 logger = get_logger(__name__)
 
@@ -37,11 +37,10 @@ def find_unenrolled_users(client: str, data_type: str) -> Dict[str, Any]:
         external_data = fetch_external_data(client, data_type)
         logger.info(f"External data shape: {external_data.shape}")
 
-        # Fetch Snowflake enrollment data
+        # Fetch Snowflake enrollment data using cached data
         logger.info("Fetching Snowflake enrollment data...")
-        snowflake_client = SnowflakeClient()
         company_name = get_snowflake_company_name(client)
-        enrollment_data = snowflake_client.query_enrollment_by_client(company_name)
+        enrollment_data = get_client_enrollment_data(company_name)
         logger.info(f"Enrollment data shape: {enrollment_data.shape}")
 
         # Find email columns for joining

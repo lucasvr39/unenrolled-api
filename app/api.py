@@ -23,6 +23,8 @@ app = FastAPI(
 )
 
 
+# TODO: refactor - deprecated method
+# https://stackoverflow.com/questions/78042466/fastapi-app-on-event-decorator-is-deprecated-how-can-i-create-a-simple-repeat
 @app.on_event("startup")
 async def startup_event():
     """Validate configuration on startup."""
@@ -43,7 +45,7 @@ async def root():
         "status": "active",
         "timestamp": datetime.now().isoformat(),
         "endpoints": {
-            "unenrolled": "/unenrolled?account=<account>&client=<client>&data_type=<data_type>",
+            "unenrolled": "/unenrolled?client=<client>&data_type=<data_type>",
             "clients": "/clients",
         },
     }
@@ -153,9 +155,4 @@ async def internal_error_handler(request, exc):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("app.api:app", host="0.0.0.0", port=8000, reload=True)
-    uvicorn.run("app.api:app", host="0.0.0.0", port=8000, reload=True)
-    uvicorn.run("app.api:app", host="0.0.0.0", port=8000, reload=True)
-    uvicorn.run("app.api:app", host="0.0.0.0", port=8000, reload=True)
-    uvicorn.run("app.api:app", host="0.0.0.0", port=8000, reload=True)
     uvicorn.run("app.api:app", host="0.0.0.0", port=8000, reload=True)

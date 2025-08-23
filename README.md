@@ -50,18 +50,23 @@ The API will be accessible at `http://localhost:8000`.
 -   **Endpoint:** `/unenrolled`
 -   **Method:** `GET`
 -   **Query Parameters:**
-    -   `account`: Snowflake account filter (string, required)
     -   `client`: Client name (e.g., `mato_grosso`, `parana`, `goias`) (string, required)
     -   `data_type`: Data type (e.g., `students`, `teachers`) (string, required)
+
+There is a **modular cache** logic implemented to prevent multiple identical queries from hammering Snowflake.
+
+#### Why "modular cache"?
+
+The cache lives at the module level, outside the SnowflakeClient class. This makes it shared across all consumers of this module, instead of tying cache state to a specific instance of SnowflakeClient. It’s a design choice: one cache per application process, not per object.
 
 **Example Request using an API Platform (e.g., Postman):**
 
 -   **URL:** `http://localhost:8000/unenrolled`
 -   **Method:** `GET`
 -   **Params:**
-    -   `company`: `snowflake_company_account`
     -   `client`: `parana`
     -   `data_type`: `students`
+
 
 ### Get Supported Clients
 
@@ -78,7 +83,7 @@ The API will be accessible at `http://localhost:8000`.
 ### Get Unenrolled Users
 
 ```bash
-curl -X GET "http://localhost:8000/unenrolled?account=your_snowflake_account&client=parana&data_type=students" -H "accept: application/json"
+curl -X GET "http://localhost:8000/unenrolled?client=parana&data_type=students" -H "accept: application/json"
 ```
 
 ### Get Supported Clients
