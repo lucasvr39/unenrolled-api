@@ -4,7 +4,7 @@ Handles connection management and executes the standard enrollment query.
 """
 
 from contextlib import contextmanager
-from typing import Optional
+from typing import List, Optional
 
 import pandas as pd
 import snowflake.connector
@@ -13,6 +13,9 @@ from .config import get_snowflake_config
 from .logging_config import get_logger
 
 logger = get_logger(__name__)
+
+# Module-level cache for enrollment data
+_cached_enrollment_data: Optional[pd.DataFrame] = None
 
 
 class SnowflakeClient:
@@ -138,3 +141,123 @@ class SnowflakeClient:
         except Exception as e:
             logger.error(f"Snowflake connection test failed: {str(e)}")
             return False
+
+    def query_all_companies(self, company_names: List[str], table_name: Optional[str] = None) -> pd.DataFrame:
+        """
+        Query Snowflake for enrollment data for all specified companies in a single query.
+
+        Args:
+            company_names: List of company names to filter by in Snowflake
+            table_name: Optional table name, uses default if not specified
+
+        Returns:
+            DataFrame with enrollment data containing Email and Company columns
+
+        Raises:
+            Exception: If query execution fails
+        """
+        if not table_name:
+            table_name = self.config["default_table"]
+
+        # Create placeholders for IN clause
+        placeholders = ", ".join([f"%({i})s" for i in range(len(company_names))])
+        
+        query = f"""
+        SELECT DISTINCT 
+            "Email",
+            "Company"
+        FROM 
+            {table_name}
+        WHERE 
+            "Company" IN ({placeholders})
+        AND
+            UPPER("Course status") = 'ACTIVE'
+        """
+
+        # Create parameters dict for query
+        params = {str(i): company for i, company in enumerate(company_names)}
+
+        logger.info(
+            f"Querying Snowflake for all companies: {company_names}, table: {table_name}"
+        )
+
+        with self._get_connection() as connection:
+            cursor = None
+            try:
+                cursor = connection.cursor()
+                cursor.execute(query, params)
+
+                # Fetch results and convert to DataFrame
+                results = cursor.fetchall()
+                columns = [desc[0] for desc in cursor.description]
+
+                df = pd.DataFrame(results, columns=columns)
+                logger.info(f"Retrieved {len(df)} enrollment records from Snowflake for all companies")
+
+                return df
+
+            except Exception as e:
+                logger.error(f"Failed to execute Snowflake query for all companies: {str(e)}")
+                raise
+            finally:
+                if cursor is not None:
+                    cursor.close()
+
+
+def get_cached_enrollment_data() -> pd.DataFrame:
+    """
+    Get enrollment data for all companies, using module-level cache if available.
+    
+    Returns:
+        DataFrame with enrollment data for all configured companies
+        
+    Raises:
+        Exception: If data fetching fails
+    """
+    global _cached_enrollment_data
+    
+    if _cached_enrollment_data is None or _cached_enrollment_data.empty:
+        logger.info("Cache empty, fetching enrollment data for all companies")
+        
+        # Import here to avoid circular imports
+        from .client_config import CLIENT_CONFIGS
+        
+        # Get all company names from client configurations
+        all_companies = [config.snowflake_company for config in CLIENT_CONFIGS.values()]
+        
+        # Fetch data using SnowflakeClient
+        client = SnowflakeClient()
+        _cached_enrollment_data = client.query_all_companies(all_companies)
+        
+        logger.info("Successfully cached enrollment data for all companies")
+    else:
+        logger.debug("Using cached enrollment data")
+    
+    return _cached_enrollment_data.copy()
+
+
+def get_client_enrollment_data(client_company_name: str) -> pd.DataFrame:
+    """
+    Get enrollment data for a specific client company from cached data.
+    
+    Args:
+        client_company_name: The company name used in Snowflake queries
+        
+    Returns:
+        DataFrame with enrollment data filtered for the specific client
+        
+    Raises:
+        Exception: If data fetching fails
+    """
+    all_data = get_cached_enrollment_data()
+    client_data = all_data[all_data['Company'] == client_company_name].copy()
+    
+    logger.debug(f"Filtered {len(client_data)} enrollment records for company: {client_company_name}")
+    return client_data
+
+
+def clear_enrollment_cache() -> None:
+    """Clear the module-level enrollment data cache."""
+    global _cached_enrollment_data
+    _cached_enrollment_data = None
+    logger.info("Enrollment data cache cleared")
