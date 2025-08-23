@@ -38,6 +38,8 @@ def find_unenrolled_users(client: str, data_type: str) -> Dict[str, Any]:
         logger.info(f"External data shape: {external_data.shape}")
 
         # Apply EJA filtering for Goias students only
+        # TODO Check below further
+        # ? Should this logic be moved to fetch_external_data function or encapsulated elsewhere
         if client == "goias" and data_type == "students":
             logger.info("Applying EJA filtering for Goias students...")
             initial_count = len(external_data)
