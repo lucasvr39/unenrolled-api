@@ -47,7 +47,6 @@ def get_ftp_config() -> Dict[str, Any]:
         "user": os.getenv("FTP_USER"),
         "password": os.getenv("FTP_PASSWORD"),
         "port": int(os.getenv("FTP_PORT", "21")),
-        "folder": os.getenv("FTP_FOLDER"),
     }
 
 
@@ -87,16 +86,23 @@ def get_client_specific_config(client: str) -> Dict[str, Any]:
             {
                 "name": "goias",
                 "source_type": "ftp",
-                "data_types": ["students", "teachers", "teachers_with_gls"],
+                "data_types": [
+                    "students",
+                    "teachers",
+                    "teachers_tec",
+                    "teachers_with_gls",
+                    "other_components",
+                ],
                 "snowflake_company": "SEDUC-GO: Goias",
                 "ftp_config": {
-                    "students_pattern": "alunos",
-                    "teachers_pattern": {"exclude": ["sem_aula_ao_vivo", "alunos"]},
-                    "teachers_with_gls_pattern": {
-                        "exclude": ["sem_aula_ao_vivo", "alunos", "servidores"]
-                    },
+                    "folder": "ftp_goenglish",
+                    "students_pattern": "relatorio_go_english_alunos",
+                    "teachers_pattern": "relatorio_go_english_professores_sem_aula_ao_vivo",
+                    "other_components_pattern": "relatorio_go_english_servidores",
+                    "teachers_tec_pattern": "relatorio_go_english_goias_tec_ao_vivo",
+                    "teachers_with_gls_pattern": "relatorio_go_english_professores",
                 },
-            }
+            },
         )
 
     return config

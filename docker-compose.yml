@@ -6,6 +6,7 @@ services:
       - "8000:8000"
     environment:
       - PORT=8000
+      - DEBUG=${DEBUG:-false}
       - GOOGLE_PRIVATE_KEY_ID=${GOOGLE_PRIVATE_KEY_ID}
       - GOOGLE_PRIVATE_KEY=${GOOGLE_PRIVATE_KEY}
       - GOOGLE_CLIENT_EMAIL=${GOOGLE_CLIENT_EMAIL}
@@ -25,6 +26,7 @@ services:
       - FTP_USER=${FTP_USER}
       - FTP_PASSWORD=${FTP_PASSWORD}
       - FTP_PORT=${FTP_PORT:-21}
+      - FTP_FOLDER=${FTP_FOLDER}
     networks:
       - n8n-network
     restart: unless-stopped
