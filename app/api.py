@@ -3,6 +3,7 @@ FastAPI application for the Unenrolled Users API.
 Provides endpoints for finding unenrolled users and listing supported clients.
 """
 
+import os
 from datetime import datetime
 from typing import Any, Dict
 
@@ -10,8 +11,15 @@ from fastapi import FastAPI, HTTPException, Query
 
 from utils.client_config import get_supported_clients, validate_client_data_type
 from utils.config import validate_config
-from utils.logging_config import get_logger
+from utils.logging_config import get_logger, setup_development_logging, setup_production_logging
 from utils.unenrolled_users import find_unenrolled_users
+
+# Initialize logging based on environment
+# This ensures logging works both in dev.py and container environments
+if os.getenv("DEBUG", "false").lower() in ("true", "1", "yes"):
+    setup_development_logging()
+else:
+    setup_production_logging()
 
 logger = get_logger(__name__)
 

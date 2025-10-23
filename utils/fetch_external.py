@@ -220,17 +220,69 @@ class FTPFetcher(ExternalDataFetcher):
 
         try:
             with ftplib.FTP() as ftp:
+                logger.info("=== FTP DEBUG INFO ===")
+                logger.info(f"Client: {client}, Data Type: {data_type}")
+                logger.info(
+                    f"FTP Config: host={self.config['host']}, port={self.config['port']}, user={self.config['user']}"
+                )
+
+                logger.debug(
+                    f"Connecting to FTP server: {self.config['host']}:{self.config['port']}"
+                )
                 ftp.connect(self.config["host"], self.config["port"])
+
+                logger.debug(f"Logging in as user: {self.config['user']}")
                 ftp.login(self.config["user"], self.config["password"])
 
-                # Navigate to specified folder if configured
-                if self.config.get("folder"):
-                    ftp.cwd(self.config["folder"])
-                    logger.info(f"Changed to FTP folder: {self.config['folder']}")
+                logger.debug("FTP connection successful, getting current directory")
+                current_dir = ftp.pwd()
+                logger.info(f"Initial FTP directory: {current_dir}")
+
+                # Navigate to specified folder from client config
+                client_config = get_client_config(client)
+                logger.info(f"Client config source_type: {client_config.source_type}")
+                logger.info(f"Client config ftp_config: {client_config.ftp_config}")
+
+                if hasattr(client_config, "ftp_config") and client_config.ftp_config:
+                    folder = client_config.ftp_config.get("folder")
+                    logger.info(f"Target folder from config: '{folder}'")
+                    if folder:
+                        logger.debug(f"Attempting to change to folder: {folder}")
+                        try:
+                            ftp.cwd(folder)
+                            logger.info(f"Successfully changed to FTP folder: {folder}")
+                            current_dir = ftp.pwd()
+                            logger.info(f"New current directory: {current_dir}")
+                        except ftplib.error_perm as folder_error:
+                            logger.error(
+                                f"Failed to change to folder '{folder}': {folder_error}"
+                            )
+                            logger.error("Available directories in current location:")
+                            try:
+                                dir_list = []
+                                ftp.retrlines("LIST", dir_list.append)
+                                for line in dir_list:
+                                    logger.error(f"  {line}")
+                            except Exception as list_error:
+                                logger.error(
+                                    f"Could not list directories: {list_error}"
+                                )
+                            raise
+                else:
+                    logger.warning(f"No ftp_config found for client {client}")
 
                 # List files in the directory
-                file_list = ftp.nlst()
-                logger.info(f"Found {len(file_list)} files on FTP server")
+                logger.debug("Attempting to list files in directory")
+                try:
+                    file_list = ftp.nlst()
+                    logger.info(f"Found {len(file_list)} files on FTP server")
+                    logger.info(f"FTP file list: {file_list}")
+                except ftplib.error_perm as list_error:
+                    logger.error(
+                        f"Failed to list files in current directory: {list_error}"
+                    )
+                    logger.error(f"Current directory: {ftp.pwd()}")
+                    raise
 
                 # Find matching files based on patterns
                 if not hasattr(config, "ftp_config") or config.ftp_config is None:
@@ -238,74 +290,134 @@ class FTPFetcher(ExternalDataFetcher):
                         f"No FTP configuration found for {client} {data_type}"
                     )
 
+                logger.info(
+                    f"Using FTP config for pattern matching: {config.ftp_config}"
+                )
                 matching_files = self._find_matching_files(
                     file_list, data_type, config.ftp_config
                 )
+                logger.info(
+                    f"Pattern matching result - Found {len(matching_files)} matching files for {data_type}: {matching_files}"
+                )
 
                 if not matching_files:
-                    raise ValueError(f"No files found matching pattern for {data_type}")
+                    pattern_info = self._get_pattern_debug_info(
+                        data_type, config.ftp_config
+                    )
+                    logger.error("=== PATTERN MATCHING FAILED ===")
+                    logger.error(f"Data type: {data_type}")
+                    logger.error(f"Pattern info: {pattern_info}")
+                    logger.error(f"Available files: {file_list}")
+                    logger.error(f"FTP config: {config.ftp_config}")
+                    raise ValueError(
+                        f"No files found matching pattern for {data_type}. "
+                        f"Pattern: {pattern_info}, Available files: {file_list}"
+                    )
 
-                # Download the first matching file
-                target_file = matching_files[0]
-                logger.info(f"Downloading file: {target_file}")
-
-                file_data = io.BytesIO()
-                ftp.retrbinary(f"RETR {target_file}", file_data.write)
-                file_data.seek(0)
-
-                # Convert to DataFrame (assuming CSV format) - encoding should be latin -1
+                # Convert to DataFrame (assuming CSV format) - encoding should be latin 1
                 # otherwise it will return 'utf-8' codec can't decode byte 0xf3 in position 29: invalid continuation
                 # and also sep = ';' because the file is separated by semicolon
-                encoding = "latin-1"
+                encoding = "utf-8" if data_type == "students" else "latin-1"
                 sep = ";"
-                df = pd.read_csv(file_data, encoding=encoding, sep=sep)
-                logger.info(f"Fetched {len(df)} records from FTP file")
+                df = pd.DataFrame()
+
+                # Download the first matching file
+                if len(matching_files) > 1:
+                    logger.warning(
+                        f"Multiple files found: {len(matching_files)}, appending all files"
+                    )
+
+                    data_frames = []
+
+                    for f in matching_files:
+                        logger.info(f"Downloading file: {f}")
+
+                        file_data = io.BytesIO()
+                        ftp.retrbinary(f"RETR {f}", file_data.write)
+                        file_data.seek(0)
+
+                        df_part = pd.read_csv(file_data, encoding=encoding, sep=sep)
+                        data_frames.append(df_part)
+
+                    df = pd.concat(data_frames, ignore_index=True)
+
+                else:
+                    logger.warning(
+                        f"Only one file found: {len(matching_files)}, reading it..."
+                    )
+                    target_file = matching_files[0]
+                    logger.info(f"Downloading file: {target_file}")
+
+                    file_data = io.BytesIO()
+                    ftp.retrbinary(f"RETR {target_file}", file_data.write)
+                    file_data.seek(0)
+
+                    df = pd.read_csv(file_data, encoding=encoding, sep=sep)
+                    logger.info(f"Fetched {len(df)} records from FTP file")
 
                 return df
 
+        except ftplib.error_perm as e:
+            logger.error(f"FTP Permission error: {str(e)}")
+            logger.error(
+                f"FTP Config: host={self.config.get('host')}, user={self.config.get('user')}, folder={self.config.get('folder')}"
+            )
+            raise
         except Exception as e:
             logger.error(f"Failed to fetch FTP data: {str(e)}")
+            logger.error(f"Error type: {type(e).__name__}")
             raise
 
     def _find_matching_files(
         self, file_list: List[str], data_type: str, ftp_config: Dict[str, Any]
     ) -> List[str]:
         """Find files matching the pattern for a specific data type."""
-        if data_type == "students":
-            pattern = ftp_config.get("students_pattern")
-            if pattern is None:
-                return []
-            return [f for f in file_list if pattern.lower() in f.lower()]
+        pattern_key = f"{data_type}_pattern"
+        pattern = ftp_config.get(pattern_key)
 
-        elif data_type == "teachers":
-            exclude_patterns = ftp_config.get("teachers_pattern", {}).get("exclude", [])
-            matching_files = []
+        if pattern is None:
+            logger.debug(f"No {pattern_key} configured in ftp_config")
+            return []
 
-            for filename in file_list:
-                filename_lower = filename.lower()
-                should_exclude = any(
-                    pattern.lower() in filename_lower for pattern in exclude_patterns
-                )
-                if not should_exclude:
-                    matching_files.append(filename)
+        logger.debug(f"Searching for {data_type} files with pattern: '{pattern}'")
+        matching_files = []
 
-            return matching_files
+        for filename in file_list:
+            filename_lower = filename.lower()
 
-        elif data_type == "teachers_with_gls":
-            exclude_patterns = ftp_config.get("teachers_with_gls_pattern", {}).get("exclude", [])
-            matching_files = []
+            # Only include CSV files and check if pattern is contained in filename
+            if not filename_lower.endswith(".csv"):
+                continue
 
-            for filename in file_list:
-                filename_lower = filename.lower()
-                should_exclude = any(
-                    pattern.lower() in filename_lower for pattern in exclude_patterns
-                )
-                if not should_exclude:
-                    matching_files.append(filename)
+            pattern_lower = pattern.lower()
+            if pattern_lower in filename_lower:
+                # Special case for teachers_with_gls: exclude files with "sem_aula_ao_vivo"
+                if (
+                    data_type == "teachers_with_gls"
+                    and "sem_aula_ao_vivo" in filename_lower
+                ):
+                    logger.debug(
+                        f"File '{filename}' -> excluded due to 'sem_aula_ao_vivo' pattern"
+                    )
+                    continue
 
-            return matching_files
+                matching_files.append(filename)
+                logger.debug(f"File '{filename}' -> pattern '{pattern}' match: True")
+            else:
+                logger.debug(f"File '{filename}' -> pattern '{pattern}' match: False")
 
-        return []
+        logger.debug(
+            f"{data_type.capitalize()} pattern matching result: {len(matching_files)} files matched"
+        )
+        return matching_files
+
+    def _get_pattern_debug_info(
+        self, data_type: str, ftp_config: Dict[str, Any]
+    ) -> str:
+        """Get debug information about the pattern being used for matching."""
+        pattern_key = f"{data_type}_pattern"
+        pattern = ftp_config.get(pattern_key)
+        return f"{pattern_key}='{pattern}'"
 
 
 class DataFetcherFactory:

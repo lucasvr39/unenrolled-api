@@ -150,7 +150,18 @@ def perform_anti_join(
     external_df_clean = external_df.copy()
     enrollment_df_clean = enrollment_df.copy()
 
-    # Normalize emails (lowercase, strip whitespace)
+    # STEP 1: Filter out null values BEFORE converting to string
+    # This prevents NaN from becoming the literal string "nan"
+    external_df_clean = external_df_clean[external_df_clean[external_col].notna()]
+    enrollment_df_clean = enrollment_df_clean[
+        enrollment_df_clean[enrollment_col].notna()
+    ]
+
+    logger.debug(
+        f"After null filtering - External: {len(external_df_clean)}, Enrollment: {len(enrollment_df_clean)}"
+    )
+
+    # STEP 2: Normalize emails (lowercase, convert to string, strip whitespace)
     external_df_clean[external_col] = (
         external_df_clean[external_col].astype(str).str.lower().str.strip()
     )
@@ -158,21 +169,46 @@ def perform_anti_join(
         enrollment_df_clean[enrollment_col].astype(str).str.lower().str.strip()
     )
 
-    # Remove any empty or null emails
-    external_df_clean = external_df_clean[external_df_clean[external_col].notna()]
-    external_df_clean = external_df_clean[external_df_clean[external_col] != ""]
-    external_df_clean = external_df_clean[external_df_clean[external_col] != "nan"]
+    # STEP 3: Remove ALL types of whitespace (including non-breaking spaces, tabs, etc.)
+    external_df_clean[external_col] = external_df_clean[external_col].str.replace(
+        r"\s+", "", regex=True
+    )
+    enrollment_df_clean[enrollment_col] = enrollment_df_clean[enrollment_col].str.replace(
+        r"\s+", "", regex=True
+    )
 
-    enrollment_df_clean = enrollment_df_clean[
-        enrollment_df_clean[enrollment_col].notna()
-    ]
+    # STEP 4: Filter out empty strings after normalization
+    external_df_clean = external_df_clean[external_df_clean[external_col] != ""]
     enrollment_df_clean = enrollment_df_clean[enrollment_df_clean[enrollment_col] != ""]
-    enrollment_df_clean = enrollment_df_clean[
-        enrollment_df_clean[enrollment_col] != "nan"
-    ]
 
     logger.debug(
-        f"After cleaning - External: {len(external_df_clean)}, Enrollment: {len(enrollment_df_clean)}"
+        f"After empty string filtering - External: {len(external_df_clean)}, Enrollment: {len(enrollment_df_clean)}"
+    )
+
+    # STEP 5: Deduplicate emails (CRITICAL - prevents false positives)
+    external_initial = len(external_df_clean)
+    enrollment_initial = len(enrollment_df_clean)
+
+    external_df_clean = external_df_clean.drop_duplicates(
+        subset=[external_col], keep="first"
+    )
+    enrollment_df_clean = enrollment_df_clean.drop_duplicates(
+        subset=[enrollment_col], keep="first"
+    )
+
+    external_dupes = external_initial - len(external_df_clean)
+    enrollment_dupes = enrollment_initial - len(enrollment_df_clean)
+
+    if external_dupes > 0:
+        logger.info(f"Removed {external_dupes} duplicate emails from external data")
+    if enrollment_dupes > 0:
+        logger.info(f"Removed {enrollment_dupes} duplicate emails from enrollment data")
+
+    # STEP 6: Keep only the email column from enrollment to prevent column pollution
+    enrollment_df_clean = enrollment_df_clean[[enrollment_col]]
+
+    logger.info(
+        f"Ready for anti-join - External: {len(external_df_clean)}, Enrollment: {len(enrollment_df_clean)}"
     )
 
     # Perform left merge with indicator
